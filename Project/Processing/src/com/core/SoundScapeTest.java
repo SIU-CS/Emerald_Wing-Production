@@ -2,9 +2,11 @@ package com.core;
 
 import static org.junit.Assert.*;
 
-public class Test {
+import org.junit.Test;
 
-	@org.junit.Test
+public class SoundScapeTest {
+
+	@Test
 	public void test() {
 		fail("Not yet implemented");
 	}
