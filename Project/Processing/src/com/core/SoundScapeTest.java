@@ -8,13 +8,14 @@ import org.junit.Test;
 
 public class SoundScapeTest {
 
+	String[] testString = {"Yell 'Dead Cell' VR(Mix)", "Metal Gear Solid 2", "Game Music", "Konami"};
 	@Test
 	public void test() {
 		fail("Not yet implemented");
 	}
 	
 	public void testMetaString() {
-		assertTrue(Arrays.equals(arg0, arg1));
+		assertTrue(Arrays.equals(testString, testString));
 	}
 
 }
