@@ -1,55 +1,15 @@
 package com.core;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-import ddf.minim.AudioMetaData;
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-=======
 import java.io.File;
 import java.util.ArrayList;
 
 import ddf.minim.AudioMetaData;
->>>>>>> master
 import ddf.minim.AudioPlayer;
 import ddf.minim.Minim;
 import ddf.minim.analysis.FFT;
 import processing.core.PApplet;
-<<<<<<< HEAD
-
-public class SoundScape extends PApplet {
-	
-	public static void main(String args[]) {
-		PApplet.main("com.core.SoundScape");
-	}
-
-	// Drawing vars
-	int cols, rows;
-	int scl = 20;	// For slower computers obviously scale up
-	int w = 1200;
-	int h = 1200;
-
-	// Camera control vars
-	float rotateCameraZ = 0;
-	float rotateCameraX = PI / 2.5f;
-
-	// Noise vars
-	float accel = 0;
-	float[][] terrain;
-
-	// Audio imports
-	Minim minim;
-	AudioPlayer song;
-<<<<<<< HEAD
-=======
-	AudioMetaData meta;
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-	FFT fft;
-
-	// Audio vars
-	float lows = 0;
-=======
 import processing.core.PFont;
+import processing.core.PImage;
 import processing.core.PVector;
 import processing.event.MouseEvent;
 
@@ -61,15 +21,17 @@ public class SoundScape extends PApplet {
 	}
 	
 // General Imports
-
+	PFont perfectDarkFont;
+	PFont btnFont, metaFont;
+	PImage icon;
+	
 // Drawing vars
 	int cols, rows;
 	int scl = 60; // For slower computers obviously scale up
 	// width and height of noise grid
 	int w = 4000;
 	int h = 4000;
-	PFont btnFont, metaFont;
-	
+
 // Button Vars
 	boolean btnFileOver, btnPlayOver, btnVerticalOver, btnMetaOver;
 	int padding = 10;
@@ -107,7 +69,6 @@ public class SoundScape extends PApplet {
 
 // Audio vars
 	float lows = 0;	// Will be 
->>>>>>> master
 	float mids = 0;
 	float highs = 0;
 
@@ -117,18 +78,6 @@ public class SoundScape extends PApplet {
 	float bandsComb = 0;
 
 	float songGain = 0;
-<<<<<<< HEAD
-	
-	int songPos = 0;
-
-	// Determines how large each freq range is
-	float specLow = 0.05f; // 5%
-	float specMid = 0.125f; // 12.5%
-	float specHi = 0.20f; // 20%
-
-	float decreaseRate = 25;
-
-=======
 
 	int songPos = 0;
 
@@ -143,6 +92,7 @@ public class SoundScape extends PApplet {
 // Colors vars
 	PVector rgbVF = new PVector(lows * 0.67f, mids * 0.67f, highs * 0.67f);
 	PVector rgbV = new PVector(100, 100, 100);
+	PVector fontFade = new PVector(255,255,255);
 	final int maxRGBstrokeValue = 230;	// MAX OF 255
 	int displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
 	int displayColor2 = color((int) rgbV.z, (int) rgbV.y, (int) rgbV.x);
@@ -152,36 +102,26 @@ public class SoundScape extends PApplet {
 // Shapes and other things like it
 	ParticleSystem particleSystem;
 	ArrayList<Shapes> shapesList;
+	ArrayList<Shapes> shapesList2;
+	float previousBandValue;
 	
->>>>>>> master
 	public void settings() {
 		size(800, 600, P3D);
 	}
 
-<<<<<<< HEAD
-	public void setup() {
-		cols = w / scl;
-		rows = h / scl;
-		terrain = new float[cols][rows];
-		
-		colorMode(RGB);	// Can be in RGB or HSB
-
-		// Audio initializing
-		minim = new Minim(this);
-<<<<<<< HEAD
-=======
-		
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-=======
 	// This is the initializations method. This is called before anything else is
 	public void setup() {
 		// General initializing
 		scale(2.0f);
+		
+		icon = loadImage("res/icon.png");
+		frame.setIconImage(icon.getImage());
+		frame.setTitle("Vector Player 3D");
+
+		perfectDarkFont = createFont("res/pdark.ttf", 48);
 		btnFont = createFont("res/ariblk.ttf", 24);
 		metaFont = createFont("res/ariblk.ttf", 26);
-		textFont(btnFont);
-		//textMode(SHAPE);
-		
+
 		// Audio initializing
 		minim = new Minim(this);
 		
@@ -195,24 +135,22 @@ public class SoundScape extends PApplet {
 				width/2.0f, height/2.0f, 0, 0,1,0);
 		
 		shapesList = new ArrayList<Shapes>();
-		for (int i = 0; i < 30; i++) {
-			shapesList.add(new Box1(this));
+		shapesList2 = new ArrayList<Shapes>();
+		
+		for (int i = 0; i < 35; i++) {
+			shapesList.add(new Box1(this, new PVector(-width, 0)));
+			shapesList2.add(new Box1(this, new PVector(w, w + (w / 2))));
 		}
 		particleSystem = new ParticleSystem(new PVector(random(-width, 0),random(-height, 0),random(h)),this, 75);
->>>>>>> master
 
 		setSong("res/song.mp3");
 	}
 
-<<<<<<< HEAD
-	public void draw() {
-		background(0);
-
-		// Getting the camera correct
-=======
 	// This runs in a loop as designed by the Processing Environment
 	public void draw() {
 		background(0);
+		
+		drawFadeIntroText();	// We want to draw the font before translation of the camera
 		
 	// Drawing UI Elements
 		btnVerticalOver = (mouseY >= btnY && mouseY <= btnY + btnHeight);
@@ -220,6 +158,7 @@ public class SoundScape extends PApplet {
 		btnPlayOver = btnVerticalOver && (mouseX >= btnPlayX && mouseX <= btnPlayX + btnWidth);
 		btnMetaOver = btnVerticalOver && (mouseX >= btnMetaX && mouseX <= btnMetaX + btnWidth);
 		
+		textAlign(LEFT);
 		textFont(btnFont);
 		fill(240, 240, 240, btnFileOver?255:128);
 		rect(btnFileX, btnY, btnWidth, btnHeight);
@@ -250,98 +189,34 @@ public class SoundScape extends PApplet {
 		}
 		
 	// Getting the camera correct
->>>>>>> master
 		translate(width / 2, height / 2);
 		rotateX(rotateCameraX);
 		rotateZ(rotateCameraZ);
 		translate(-w / 2, -h / 2);
-<<<<<<< HEAD
-=======
 		
 		
 		getMouseDragging();
->>>>>>> master
 
 		if (song.isPlaying()) {
 			processSong();
 			populateNoise();
 		} else {
-<<<<<<< HEAD
-			populateNoise();
-		}
-		
-		int bandIncr = 0;
-<<<<<<< HEAD
-		// Acctually draw it
-=======
-		// Actually draw it
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-		for (int y = 0; y < rows - 1; y++) {
-			beginShape(TRIANGLE_STRIP);
-			if (song.isPlaying()) {
-				bandIncr = (int) (lows * 0.03f);
-				float intensity = fft.getBand(y % (int) (fft.specSize() * specHi));
-				int displayColor = color(lows * 0.67f, mids * 0.67f, highs * 0.67f);
-				//int displayColor = color(fft.getBand((int) (fft.specSize() * specMid)) % 256, 255, 255);
-				fill(displayColor, intensity * 5);
-				stroke(intensity * 5);
-			} else {
-				noFill();
-				stroke(200);
-			}
-			for (int x = 0; x < cols; x++) {
-				vertex(x * scl, y * scl, terrain[x][y]);
-				vertex(x * scl, (y + 1) * scl, terrain[x][y + 1]);
-			}
-			endShape();
-		}
-		bandIncr = 0;
-	}
-
-	public void keyPressed() {
-		if (keyCode == UP) {
-			rotateCameraX -= 0.1;
-		}
-		if (keyCode == DOWN) {
-			rotateCameraX += 0.1;
-		}
-		if (keyCode == RIGHT) {
-			rotateCameraZ -= 0.1;
-		}
-		if (keyCode == LEFT) {
-			rotateCameraZ += 0.1;
-		}
-		if (key == 'f' & (song.getGain() >= -80)) {
-			songGain -= 2;
-		}
-		if (key == 'r' & (song.getGain() <= 0)) {
-			songGain += 2;
-		}
-		if (key == 'o') {
-			song.play(songPos);
-		}
-		if (key == 'p') {
-			songPos = song.position();
-			song.pause();
-=======
 		    if (bandsComb > 0)
 		    	bandsComb -= 5;
 			populateNoise();
 		}
 		
+		particleSystem.run();
 		generateSomeLines();
 		
-		particleSystem.run();
-		
 		if(intensity > 252 & song.isPlaying()) {
-			//particleSystem.changePos();
+			particleSystem.changePos();
 		}
 		for (int i = 0; i < shapesList.size(); i++) {
-			shapesList.get(i).run(displayColor2, displayColor);
+			shapesList.get(i).run(displayColor2, displayColor, new PVector(-width, 0), new PVector(-width,h));
+			shapesList2.get(i).run(displayColor3, displayColor2, new PVector(w, w + (w / 2)), new PVector(-width,h));
 		}
-		
-		fill(240);
-		
+    
 	// Acctually draw it
 		for (int y = 0; y < rows - 1; y++) {
 			if (song.isPlaying()) {
@@ -364,6 +239,7 @@ public class SoundScape extends PApplet {
 			}
 			displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
 			displayColor2 = color((int) rgbV.z, (int) rgbV.y, (int) rgbV.x);
+			displayColor3 = color((int) rgbV.x, (int) rgbV.y, (int) rgbV.z);
 			
 			int mappedIntensity = (int) map(intensity * 5, 0, 300, 0, 255);
 			
@@ -380,13 +256,29 @@ public class SoundScape extends PApplet {
 			endShape();
 		}// end of double for
 	}
-
+	private void drawFadeIntroText() {
+		textMode(SHAPE);
+		noStroke();
+		textFont(perfectDarkFont);
+		textAlign(CENTER,CENTER);
+		if(fontFade.x < 2)
+			noFill();
+		else
+			fill(fontFade.x,fontFade.y,fontFade.z);
+		text("Vector",(width / 2), (height / 2)-50);
+		text("Player",(width / 2), (height / 2));
+		text(" 3 D",(width / 2), (height / 2)+50);
+		if (fontFade.z > 1) fontFade.z -= 3;
+		else if (fontFade.y > 1) fontFade.y -= 3;
+		else if (fontFade.x > 1) fontFade.x -= 3;
+		textMode(MODEL);
+	}
 	private void getMouseDragging() {
-		if (!mousePressed & (mouseX < width) & (mouseY < height)) {
+		if (!mousePressed & (mouseX > 0) & (mouseY > 0) & (mouseX < width) & (mouseY < height)) {
 			mouseLastX = mouseX;
 			mouseLastY = mouseY;
 		}
-		if (mousePressed & (mouseX < width) & (mouseY < height)) {
+		if (mousePressed & (mouseX > 0) & (mouseY > 0) & (mouseX < width) & (mouseY < height)) {
 			if (mouseX < (mouseLastX)-5) {
 				rotateCameraZ += map(mouseX,mouseLastX,(mouseLastX - width),0,0.07f);
 			} else if (mouseX > (mouseLastX)+5) {
@@ -401,18 +293,16 @@ public class SoundScape extends PApplet {
 	}
 	public void mouseWheel(MouseEvent event) {
 		float e = event.getCount();
-		songGain += map(e, -1, 1, 2, -2);
+		if (songGain < 0) songGain += map(e, 1, 0, 0, 2);
+		if (songGain > -80) songGain += map(e, -1, 0, 0, -2);
+		if (songGain > 0) songGain = 0;
+		if (songGain < -80) songGain = -80;
 	}
 	public void keyPressed() {
-		if (key == 'f' & (song.getGain() >= -30))
-			songGain -= 2;
-		if (key == 'r' & (song.getGain() <= 0))
-			songGain += 2;
 		if (key == 'q') {
 			song.pause();
 			selectInput("Select a file to process:", "fileSelected"); // Will open a built in file explorer
 		}
-		
 		if (key == 'p') {
 			if (song.isPlaying()) {
 			    songPos = song.position();
@@ -422,7 +312,6 @@ public class SoundScape extends PApplet {
 			  }
 		}
 	}
-	
 	public void mousePressed(){
 		if(btnFileOver){
 			song.pause();
@@ -435,25 +324,11 @@ public class SoundScape extends PApplet {
 			  } else {
 			    song.play(songPos);
 			  }
->>>>>>> master
 		}
 	}
-
 	public void setSong(String file) {
 		try {
 			song = minim.loadFile(file);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-			meta = song.getMetaData();
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-		} catch (Exception NullPointerException) {
-			// Literally do nothing cause minim will have problems with you
-		}
-		fft = new FFT(song.bufferSize(), song.sampleRate());
-	}
-
-=======
 			meta = song.getMetaData();
 		} catch (Exception e) {
 			println("We got a "+e.toString()+" error. So uh, yea.");
@@ -463,7 +338,6 @@ public class SoundScape extends PApplet {
 		fft = new FFT(song.bufferSize(), song.sampleRate());
 		refreshMetadata();
 	}
-	
 	// Runs when a song needs to be selected
 	public void fileSelected(File selection) {
 		if (selection == null) {
@@ -478,34 +352,22 @@ public class SoundScape extends PApplet {
 			}
 		}
 	}
-	
->>>>>>> master
 	private void populateNoise() {
 		float xoff = accel;
 		for (int y = 0; y < rows; y++) {
 			float yoff = 0;
 			for (int x = 0; x < cols; x++) {
-<<<<<<< HEAD
-				terrain[x][y] = map(noise(xoff, yoff), 0, 1, -75, 75);
-				/*
-				 * What map will do is take perlin noise's double output,-1 to
-				 * 1, and will multiply that between some lower range and some
-				 * positive range numbers.
-				 */ yoff += 0.22;
-=======
 				if (song.isPlaying())
 					noiseAmplitude = map(intensity, 0, 255, defaultNoiseAmplitude, defaultNoiseAmplitude + intensity);
 				else
 					noiseAmplitude = defaultNoiseAmplitude;
 				terrain[x][y] = map(noise(xoff, yoff), 0, 1, -noiseAmplitude, noiseAmplitude);
 				yoff += 0.22;
->>>>>>> master
 			}
 			xoff += 0.22;
 		}
 		accel -= (0.03 + (bandsComb * 0.0001));
 	}
-
 	private void processSong() {
 		stroke(50);
 		song.setGain(songGain);
@@ -520,51 +382,6 @@ public class SoundScape extends PApplet {
 		lows = 0;
 		mids = 0;
 		highs = 0;
-<<<<<<< HEAD
-
-		for (int i = 0; i < fft.specSize() * specLow; i++) {
-			lows += fft.getBand(i);
-		}
-
-		for (int i = (int) (fft.specSize() * specLow); i < fft.specSize() * specMid; i++) {
-			mids += fft.getBand(i);
-		}
-
-		for (int i = (int) (fft.specSize() * specMid); i < fft.specSize() * specHi; i++) {
-			highs += fft.getBand(i);
-		}
-
-		// Will slow down any instant loss in sound by decrease rate
-		if (oldLow > lows) {
-			lows = oldLow - decreaseRate;
-		}
-
-		if (oldMid > mids) {
-			mids = oldMid - decreaseRate;
-		}
-
-		if (oldHigh > highs) {
-			highs = oldHigh - decreaseRate;
-		}
-
-		bandsComb = 0.66f * lows + 0.8f * mids + 1 * highs;
-	}
-<<<<<<< HEAD
-=======
-	
-	//creates an array of strings that hold the title, album, genre, and author
-	
-	public String[] MetaString (){
-		String[] metadata = {meta.title(), meta.album(), meta.genre(), meta.author()};
-		return metadata;
-	}
->>>>>>> eb52f140e57e39ea2cdb252e0fbff450abc7eab9
-
-	public class TerrainPart {
-
-	}
-
-=======
 		
 		// Adds the bands that are present to the 3 sections
 		for (int i = 0; i < fft.specSize() * specLow; i++)
@@ -583,14 +400,13 @@ public class SoundScape extends PApplet {
 			highs = oldHigh - decreaseRate;
 		bandsComb = 0.66f * lows + 0.8f * mids + 1 * highs;
 	}
-	
 	private void generateSomeLines() {
 		float heightMult = 4;
 		float dist = -((cols / fft.specSize()) + cols);
 		int zOffset = -300;
-		float previousBandValue = fft.getBand(0);
 		int n = - (int)(((fft.specSize() * specLow) + (fft.specSize() * specMid))/4);
 		if (song.isPlaying()) {
+			previousBandValue = fft.getBand(0);
 			for (int i = 0; i < (((fft.specSize() * specLow) + (fft.specSize() * specMid))/4)+(((fft.specSize() * specLow) + (fft.specSize() * specMid))); i++) {
 				stroke(map(lows, 0, 1200, 0, 255), map(mids, 0, 800, 0, 255), map(highs, 0, 800, 0, 255));
 				float bandValue = fft.getBand(i)*(1 + (i/50));
@@ -608,15 +424,18 @@ public class SoundScape extends PApplet {
 				n ++;
 				xoff += 0.01;
 			}
-			lineAccel -= 0.03;
+			lineAccel -= 0.01;
 		}
 	}
-	
-	public void refreshMetadata(){
+	public String[] MetaString () {
+		String[] metadata = {meta.title(), meta.album(), meta.genre(), meta.author()};
+		return metadata;
+	}
+    
+	public void refreshMetadata() {
 		songTitle = meta.title();
 		songAlbum = meta.album();
 		songAuthor = meta.author();
 		songGenre = meta.genre();
 	}
->>>>>>> master
 }
