@@ -76,4 +76,29 @@
             <classpath refid="Emerald_Wing-Production.classpath"/>
         </java>
     </target>
+	<target name="compile">
+		<mkdir dir="${classes.dir}"/>
+		<javac srcdir="${src.dir}" destdir="${classes.dir}">
+		<classpath>
+			<pathelement path="lib/junit-4.12.jar"/>
+		</classpath>
+		</javac>
+	</target>
+	<property name="test.report.dir" value="./tests"/>
+<mkdir dir="${test.report.dir}"/>
+<target name="junit" depends="compile">
+<junit printsummary="on" fork="true" haltonfailure="yes">
+<classpath >
+<fileset dir="lib/">
+<include name="junit-4.12.jar" />
+</fileset>
+</classpath>
+<formatter type="plain" />
+<batchtest todir="${test.report.dir}">
+<fileset dir="${src.dir}">
+<include name="**/*Test.java" />
+</fileset>
+</batchtest>
+</junit>
+</target>
 </project>
