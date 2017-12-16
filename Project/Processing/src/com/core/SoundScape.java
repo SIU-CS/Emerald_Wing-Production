@@ -3,6 +3,7 @@ package com.core;
 import java.io.File;
 import java.util.ArrayList;
 
+import ddf.minim.AudioInput;
 import ddf.minim.AudioMetaData;
 import ddf.minim.AudioPlayer;
 import ddf.minim.Minim;
@@ -21,23 +22,26 @@ public class SoundScape extends PApplet {
 	}
 	
 // General Imports
-	PFont perfectDarkFont;
-	PFont btnFont, metaFont;
+	PFont perfectDarkFont, btnFont, metaFont, textFont;
 	PImage icon;
+	String[] args = {"VP3D Control Window"};
+	ControlWindow cw;
 	
 // Drawing vars
 	int cols, rows;
 	int scl = 60; // For slower computers obviously scale up
 	// width and height of noise grid
 	int w = 4000;
-	int h = 4000;
-
+	int h = 6000;
+	
 // Button Vars
 	boolean btnFileOver, btnPlayOver, btnVerticalOver, btnMetaOver;
 	int padding = 10;
 	int btnHeight = 50;
 	int btnWidth = 110;
 	int btnFileX = padding, btnY = padding, btnPlayX = btnFileX + btnWidth + padding, btnMetaX = btnPlayX + btnWidth + padding;
+	
+	boolean debugOpen = false;
 
 // Meta Vars
 	int metaTextHeight = 40;
@@ -53,6 +57,15 @@ public class SoundScape extends PApplet {
 // Camera control vars
 	float rotateCameraZ = 0;
 	float rotateCameraX = PI / 2.5f;
+	
+	final float idealCamRotZ = 0, idealCamRotX = 1.75f;
+	final float camRotZroam = 1, maxCamRotXroam = 2, minCamRotXroam = 1.2f; // for Z we can use positive 1 and negative 1
+	float distanceBetweenX = 0, distanceBetweenZ = 0;
+	float targetRoamX = 0, targetRoamZ = 0;
+	float previousCamX = 0, previousCamZ = 0;
+	int timeSenseLastDrag = 0, randomTimeToWait = 5500;
+	long timeSenseLastRoam = 0;
+	boolean startedRoam = false, dragedOneTime = true, roamedLastOneTime = false;
 	int mouseLastX = 0, mouseLastY = 0;
 	
 // Noise vars
@@ -66,12 +79,15 @@ public class SoundScape extends PApplet {
 	AudioPlayer song;
 	FFT fft;
 	AudioMetaData meta;
+	AudioInput lineIn;
 
 // Audio vars
-	float lows = 0;	// Will be 
+	float subs = 0;	
+	float lows = 0;
 	float mids = 0;
 	float highs = 0;
 
+	float oldSub = subs;
 	float oldLow = lows;
 	float oldMid = mids;
 	float oldHigh = highs;
@@ -80,13 +96,20 @@ public class SoundScape extends PApplet {
 	float songGain = 0;
 
 	int songPos = 0;
+	
+	boolean isThereSound = false;
+	
+	final float idealVol = 2.75f;
+	float adjustmentVol = 1.0f;
+	float avgVol = 0, lastAvgVol = 0;
 
 	// Determines how large each freq range is
-	float specLow = 0.08f; // 8%
-	float specMid = 0.15f; // 15%
-	float specHi = 0.20f; // 20%
+	float specSub = 0.01f; // 1%
+	float specLow = 0.07f; // 6%
+	float specMid = 0.15f; // 13.5%
+	float specHi = 0.2f; // 20%
 
-	float decreaseRate = 25;
+	float decreaseRate = 30;
 	float intensity = 0;
 
 // Colors vars
@@ -97,7 +120,10 @@ public class SoundScape extends PApplet {
 	int displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
 	int displayColor2 = color((int) rgbV.z, (int) rgbV.y, (int) rgbV.x);
 	int displayColor3 = color((int) rgbV.x, (int) rgbV.y, (int) rgbV.z);
-	
+	int currentColorMode = 3; // 1 for RGB and 3 for HSB
+	int HSBColor = 0;
+	float colorEffector = 0;
+	final int targetHSB = 160;
 	
 // Shapes and other things like it
 	ParticleSystem particleSystem;
@@ -111,25 +137,35 @@ public class SoundScape extends PApplet {
 
 	// This is the initializations method. This is called before anything else is
 	public void setup() {
+		cw = new ControlWindow(this);
+		runSketch(args, cw);
+		cw.noLoop();
+		cw.getSurface().setVisible(false);
+		surface.setResizable(true);
 		// General initializing
+		
 		scale(2.0f);
 		
 		icon = loadImage("res/icon.png");
 		frame.setIconImage(icon.getImage());
-		frame.setTitle("Vector Player 3D");
+		surface.setTitle("Vector Player 3D");
 
 		perfectDarkFont = createFont("res/pdark.ttf", 48);
 		btnFont = createFont("res/ariblk.ttf", 24);
+		textFont = createFont("res/ariblk.ttf", 12);
 		metaFont = createFont("res/ariblk.ttf", 26);
 
 		// Audio initializing
 		minim = new Minim(this);
+		lineIn = minim.getLineIn();
+		lineIn.mute();
+		fft = new FFT(lineIn.bufferSize(), lineIn.sampleRate());
 		
 		cols = w / scl;
 		rows = h / scl;
 		terrain = new float[cols][rows];
 
-		colorMode(RGB); // Can be in RGB or HSB
+		colorMode(HSB); // Can be in RGB or HSB
 		
 		camera(width / 2.0f, height / 2.0f, (height/2.0f) / tan(PI*30.0f / 180.0f),
 				width/2.0f, height/2.0f, 0, 0,1,0);
@@ -150,7 +186,17 @@ public class SoundScape extends PApplet {
 	public void draw() {
 		background(0);
 		
+		if (song.isPlaying())
+			isThereSound = true;
+		if (lineIn.isMonitoring())
+			isThereSound = true;
+		
+		if (isThereSound)
+			particleSystem.run();
+		
 		drawFadeIntroText();	// We want to draw the font before translation of the camera
+		
+		generateSomeLines();
 		
 	// Drawing UI Elements
 		btnVerticalOver = (mouseY >= btnY && mouseY <= btnY + btnHeight);
@@ -158,13 +204,22 @@ public class SoundScape extends PApplet {
 		btnPlayOver = btnVerticalOver && (mouseX >= btnPlayX && mouseX <= btnPlayX + btnWidth);
 		btnMetaOver = btnVerticalOver && (mouseX >= btnMetaX && mouseX <= btnMetaX + btnWidth);
 		
+		int buttonRGB = color(240,240,240);
+		fill(180);
+		textAlign(RIGHT);
+		textFont(textFont);
+		text("FPS: "+round(frameRate),width-10,12);
+		
 		textAlign(LEFT);
 		textFont(btnFont);
-		fill(240, 240, 240, btnFileOver?255:128);
+		fill(buttonRGB, btnFileOver?255:50);
+		stroke(displayColor, btnFileOver?intensity:30);
 		rect(btnFileX, btnY, btnWidth, btnHeight);
-		fill(240, 240, 240, btnPlayOver?255:128);
+		fill(buttonRGB, btnPlayOver?255:50);
+		stroke(displayColor, btnPlayOver?intensity:30);
 		rect(btnPlayX, btnY, btnWidth, btnHeight);
-		fill(240, 240, 240, btnMetaOver?255:128);
+		fill(buttonRGB, btnMetaOver?255:50);
+		stroke(displayColor, btnMetaOver?intensity:30);
 		rect(btnMetaX, btnY, btnWidth, btnHeight);
 		fill(0);
 		text("File", btnFileX + 30, btnY + 5, 90, 40);
@@ -194,10 +249,13 @@ public class SoundScape extends PApplet {
 		rotateZ(rotateCameraZ);
 		translate(-w / 2, -h / 2);
 		
-		
 		getMouseDragging();
+		
+		if (timeSenseLastDrag > 8000) {
+			cameraRoam();
+		}
 
-		if (song.isPlaying()) {
+		if (isThereSound) {
 			processSong();
 			populateNoise();
 		} else {
@@ -206,55 +264,97 @@ public class SoundScape extends PApplet {
 			populateNoise();
 		}
 		
-		particleSystem.run();
-		generateSomeLines();
-		
-		if(intensity > 252 & song.isPlaying()) {
+		if (intensity > 240 & isThereSound) {
 			particleSystem.changePos();
 		}
+		
+		if (isThereSound)
 		for (int i = 0; i < shapesList.size(); i++) {
-			shapesList.get(i).run(displayColor2, displayColor, new PVector(-width, 0), new PVector(-width,h));
-			shapesList2.get(i).run(displayColor3, displayColor2, new PVector(w, w + (w / 2)), new PVector(-width,h));
+			shapesList.get(i).run(new PVector(rgbV.z,rgbV.y,rgbV.x), rgbVF);
+			shapesList2.get(i).run(rgbV, new PVector(rgbV.z,rgbV.y,rgbV.x));
 		}
     
 	// Acctually draw it
 		for (int y = 0; y < rows - 1; y++) {
-			if (song.isPlaying()) {
-				intensity = fft.getBand(y % (int) (fft.specSize() * specHi));
-				rgbVF = new PVector(lows * 0.37f, mids * 0.37f, highs * 0.37f);
-				rgbV = new PVector(lows * 0.37f, mids * 0.37f, highs * 0.37f);
+			// Handle colors first
+			if (currentColorMode == RGB) {
+				if (isThereSound) {
+					intensity = fft.getBand(y % (int) (fft.specSize() * (specLow + specMid + specHi)));
+					rgbVF = new PVector(lows * 0.47f, mids * 0.37f, highs * 0.37f);
+					rgbV = new PVector(lows * 0.47f, mids * 0.37f, highs * 0.37f);
+				} else {
+				// Stroke rgb
+					if (rgbV.x <= maxRGBstrokeValue) rgbV.x += 0.01f;
+					else if (rgbV.x >= maxRGBstrokeValue+1) rgbV.x -= 0.01f;
+					if (rgbV.y <= maxRGBstrokeValue) rgbV.y += 0.01f;
+					else if (rgbV.y >= maxRGBstrokeValue+1) rgbV.y -= 0.01f;
+					if (rgbV.z <= maxRGBstrokeValue) rgbV.z += 0.01f;
+					else if (rgbV.z >= maxRGBstrokeValue+1) rgbV.z -= 0.01f;
+				// Fill rgb
+					if (rgbVF.x > 1) rgbVF.x -= 0.01f;
+					if (rgbVF.y > 1) rgbVF.y -= 0.01f;
+					if (rgbVF.z > 1) rgbVF.z -= 0.01f;
+					if (intensity <= 254) intensity += 0.01f;
+				}
+				displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
+				displayColor2 = color((int) rgbV.z, (int) rgbV.y, (int) rgbV.x);
+				displayColor3 = color((int) rgbV.x, (int) rgbV.y, (int) rgbV.z);
+				
+				int mappedIntensity = (int) map(intensity * 5, 0, 300, 0, 255);
+				
+				beginShape(TRIANGLE_STRIP);
+				if (rgbVF.x + rgbVF.y + rgbVF.z > 2)
+					fill(displayColor, mappedIntensity);
+				else
+					noFill();
+				stroke(displayColor2, mappedIntensity);
 			} else {
-			// Stroke rgb
-				if (rgbV.x <= maxRGBstrokeValue) rgbV.x += 0.001f;
-				else if (rgbV.x >= maxRGBstrokeValue+1) rgbV.x -= 0.001f;
-				if (rgbV.y <= maxRGBstrokeValue) rgbV.y += 0.001f;
-				else if (rgbV.y >= maxRGBstrokeValue+1) rgbV.y -= 0.001f;
-				if (rgbV.z <= maxRGBstrokeValue) rgbV.z += 0.001f;
-				else if (rgbV.z >= maxRGBstrokeValue+1) rgbV.z -= 0.001f;
-			// Fill rgb
-				if (rgbVF.x > 1) rgbVF.x -= 0.01f;
-				if (rgbVF.y > 1) rgbVF.y -= 0.01f;
-				if (rgbVF.z > 1) rgbVF.z -= 0.01f;
-				if (intensity <= 254) intensity += 0.01f;
+				if (isThereSound) {
+					intensity = fft.getBand(y % (int) (fft.specSize() * (specLow + specMid + specHi)));
+					HSBColor = (int) (map(bandsComb * colorEffector, 0, 2675, 0, 360));
+					
+					if (lastAvgVol <= 0.005f)
+						HSBColor = targetHSB;
+					if (HSBColor >= targetHSB + 30)
+						colorEffector -= 0.00005f;
+					else if (HSBColor <= targetHSB - 30)
+						colorEffector += 0.00005f;
+					rgbVF = new PVector(HSBColor, 255, 255);
+					rgbV = new PVector(HSBColor, 255, 255);
+				} else {
+					rgbVF.x = 0;
+					if (rgbVF.y > 1) rgbVF.y -= 0.01f;
+					if (rgbVF.z > 1) rgbVF.z -= 0.01f;
+					if (rgbV.y > 0) rgbV.y -= 0.01f;
+					if (rgbV.z > 220) rgbV.z -= 0.01f;
+					else if (rgbV.z < 219) rgbV.z += 0.1f;
+					if (intensity <= 200) intensity += 0.01f;
+				}
+				displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
+				displayColor2 = color((int) map(rgbV.x, 255, 0, 0, 255), (int) rgbV.y, (int) rgbV.z);
+				displayColor3 = color((int) rgbV.x, (int) rgbV.y, (int) rgbV.z);
+				
+				int mappedIntensity = (int) map(intensity * 5, 0, 300, 0, 255);
+				
+				beginShape(TRIANGLE_STRIP);
+				if (rgbVF.x + rgbVF.y + rgbVF.z > 2)
+					fill(displayColor, mappedIntensity);
+				else
+					noFill();
+				stroke(displayColor2, intensity);
 			}
-			displayColor = color((int) rgbVF.x, (int) rgbVF.y, (int) rgbVF.z);
-			displayColor2 = color((int) rgbV.z, (int) rgbV.y, (int) rgbV.x);
-			displayColor3 = color((int) rgbV.x, (int) rgbV.y, (int) rgbV.z);
-			
-			int mappedIntensity = (int) map(intensity * 5, 0, 300, 0, 255);
-			
-			beginShape(TRIANGLE_STRIP);
-			if (rgbVF.x + rgbVF.y + rgbVF.z > 2)
-				fill(displayColor, mappedIntensity);
-			else
-				noFill();
-			stroke(displayColor2, mappedIntensity);
 			for (int x = 0; x < cols; x++) {
 				vertex((x * scl) + xoffset, (y * scl) + yoffset, (terrain[x][y] + zoffset));
 				vertex((x * scl) + xoffset, ((y + 1) * scl) + yoffset, (terrain[x][y + 1] + zoffset));
 			}
 			endShape();
 		}// end of double for
+	}
+	
+	public void stop() {
+		song.close();
+		minim.stop();
+		super.stop();
 	}
 	private void drawFadeIntroText() {
 		textMode(SHAPE);
@@ -279,6 +379,7 @@ public class SoundScape extends PApplet {
 			mouseLastY = mouseY;
 		}
 		if (mousePressed & (mouseX > 0) & (mouseY > 0) & (mouseX < width) & (mouseY < height)) {
+			timeSenseLastDrag = 0;
 			if (mouseX < (mouseLastX)-5) {
 				rotateCameraZ += map(mouseX,mouseLastX,(mouseLastX - width),0,0.07f);
 			} else if (mouseX > (mouseLastX)+5) {
@@ -288,6 +389,38 @@ public class SoundScape extends PApplet {
 				rotateCameraX += map(mouseY,mouseLastY,(mouseLastY - width),0,0.07f);
 			} else if (mouseY > (mouseLastY)+5) {
 				rotateCameraX -= map(mouseY,mouseLastY,(mouseLastY + width),0,0.07f);
+			}
+			dragedOneTime = true;
+		} else if (dragedOneTime) {
+			timeSenseLastDrag = millis();
+			dragedOneTime = false;
+		}
+	}
+	private void cameraRoam() {
+		if (!startedRoam) {
+			previousCamX = rotateCameraX;
+			previousCamZ = rotateCameraZ;
+			targetRoamX = random(minCamRotXroam, maxCamRotXroam);
+			targetRoamZ = random(-camRotZroam, camRotZroam);
+			distanceBetweenX = abs(targetRoamX - previousCamX);
+			distanceBetweenZ = abs(targetRoamZ - previousCamZ);
+			startedRoam = true;
+		} else {
+			if (roamedLastOneTime) {
+				randomTimeToWait = (int) random(2500,5500);
+				timeSenseLastRoam = System.currentTimeMillis();
+				roamedLastOneTime = false;
+			}
+			if (timeSenseLastRoam > randomTimeToWait) {
+				float accelX = map(rotateCameraX, previousCamX, distanceBetweenX, 0.1f, 1);
+				float deccelX = map(rotateCameraX, distanceBetweenX, targetRoamX, 0.1f, 1);
+				rotateCameraX += 0.01 * accelX;
+				
+				/* TODO Finish camera roam method
+				 * Accelerate evenly to the distance between from the starting pos
+				 * and decelerate evenly to the target from the distance between
+				 * BUT must end at the target without falling below 0
+				 */
 			}
 		}
 	}
@@ -299,31 +432,71 @@ public class SoundScape extends PApplet {
 		if (songGain < -80) songGain = -80;
 	}
 	public void keyPressed() {
+		if (keyCode == 97 & !debugOpen) {	// F1 is 97
+			cw.loop();
+			cw.getSurface().setVisible(true);
+			println("************\nDEBUG MENUE\n*************");
+			debugOpen = true;
+		} else if (keyCode == 97 & debugOpen) {
+			cw.noLoop();
+			cw.getSurface().setVisible(false);
+			println("************\nDEBUG MENUE CLOSED\n*************");
+			debugOpen = false;
+		}
+		if (keyCode == LEFT || keyCode == RIGHT)
+			toggleColorMode();
+		
+		if (key == 'm')
+			toggleLineIn();
+		
+		if (keyCode == 32) {
+			toggleSong();
+		}
 		if (key == 'q') {
-			song.pause();
+			if (lineIn.isMonitoring())
+				toggleLineIn();
+			if (song.isPlaying())
+				toggleSong();
 			selectInput("Select a file to process:", "fileSelected"); // Will open a built in file explorer
 		}
-		if (key == 'p') {
-			if (song.isPlaying()) {
-			    songPos = song.position();
-			    song.pause();
-			  } else {
-			    song.play(songPos);
-			  }
+	}
+	public void toggleSong() {
+		if (lineIn.isMonitoring())
+			toggleLineIn();
+		if (song.isPlaying()) {
+			song.pause();
+			songPos = song.position();
+			isThereSound = false;
+		} else {
+			adjustmentVol = 1;
+		    song.play(songPos);
 		}
 	}
 	public void mousePressed(){
 		if(btnFileOver){
-			song.pause();
+			if (lineIn.isMonitoring())
+				toggleLineIn();
+			if (song.isPlaying())
+				toggleSong();
 			mousePressed = false;
 			selectInput("Select a file to process:", "fileSelected");
 		}else if(btnPlayOver){
-			if (song.isPlaying()) {
-			    songPos = song.position();
-			    song.pause();
-			  } else {
-			    song.play(songPos);
-			  }
+			toggleSong();
+		}
+	}
+	public void toggleLineIn() {
+		if (song.isPlaying()) {
+		    songPos = song.position();
+			song.pause();
+		}
+		if (!lineIn.isMonitoring()) {
+			println("IS MONITORING");
+			adjustmentVol = 1;
+			lineIn.enableMonitoring();
+			fft = new FFT(lineIn.bufferSize(), lineIn.sampleRate());
+		} else {
+			lineIn.disableMonitoring();
+			isThereSound = false;
 		}
 	}
 	public void setSong(String file) {
@@ -335,10 +508,26 @@ public class SoundScape extends PApplet {
 			println("It's ok though. We'll play the default song.");
 		}
 		songPos = 0;
+		isThereSound = false;
 		fft = new FFT(song.bufferSize(), song.sampleRate());
 		refreshMetadata();
 	}
-	// Runs when a song needs to be selected
+	
+	public int toggleColorMode() {
+		if (currentColorMode == 1) {
+			colorMode(HSB);
+			currentColorMode = 3;
+			return 0;
+		}
+		if (currentColorMode == 3) {
+			colorMode(RGB);
+			currentColorMode = 1;
+			return 0;
+		}
+		return 1;
+	}
+	
+// Runs when a song needs to be selected
 	public void fileSelected(File selection) {
 		if (selection == null) {
 			println("Window was closed or the user hit cancel.");
@@ -357,7 +546,7 @@ public class SoundScape extends PApplet {
 		for (int y = 0; y < rows; y++) {
 			float yoff = 0;
 			for (int x = 0; x < cols; x++) {
-				if (song.isPlaying())
+				if (isThereSound)
 					noiseAmplitude = map(intensity, 0, 255, defaultNoiseAmplitude, defaultNoiseAmplitude + intensity);
 				else
 					noiseAmplitude = defaultNoiseAmplitude;
@@ -368,23 +557,56 @@ public class SoundScape extends PApplet {
 		}
 		accel -= (0.03 + (bandsComb * 0.0001));
 	}
+	
 	private void processSong() {
 		stroke(50);
 		song.setGain(songGain);
 
 		// Forwards the song on draw() for each "frame" of the song
-		fft.forward(song.mix);
-
+		if (song.isPlaying())
+			fft.forward(song.mix);
+		if (lineIn.isMonitoring())
+			fft.forward(lineIn.mix);
+		
+		// TODO add smoothing to averaging of volume
+		
+		// This adjusts to an ideal volume based on default song (avg: 250)
+		float temp = 0;
+		for (int i=0; i < fft.specSize(); i++) {
+			temp += fft.getBand(i);
+		}
+		avgVol = temp / fft.specSize();
+		lastAvgVol = avgVol;
+		if (avgVol >= 0.005f)
+			for (int i=0; i < fft.specSize(); i++)
+				fft.scaleBand(i, (adjustmentVol * 0.63f));
+		temp = 0;
+		for (int i=0; i < fft.specSize(); i++) {
+			temp += fft.getBand(i);
+		}
+		avgVol = temp / fft.specSize();
+		if (avgVol <= 0.005f)
+			avgVol = idealVol;
+		
+		if (avgVol < idealVol - 2)
+			adjustmentVol += 0.1f;
+		else if (avgVol > idealVol + 2)
+			adjustmentVol -= 0.1f;
+		
 		// Setting vars
+		oldSub = subs;
 		oldLow = lows;
 		oldMid = mids;
 		oldHigh = highs;
+		subs = 0;
 		lows = 0;
 		mids = 0;
 		highs = 0;
 		
 		// Adds the bands that are present to the 3 sections
-		for (int i = 0; i < fft.specSize() * specLow; i++)
+		for (int i = 0; i < fft.specSize() * specSub; i++)
+			subs += fft.getBand(i);
+		for (int i = 0; i < fft.specSize() * specLow + specSub; i++)
 			lows += fft.getBand(i);
 		for (int i = (int) (fft.specSize() * specLow); i < fft.specSize() * specMid; i++)
 			mids += fft.getBand(i);
@@ -392,39 +614,31 @@ public class SoundScape extends PApplet {
 			highs += fft.getBand(i);
 		
 		// Will slow down any instant loss in sound by decrease rate
+		if (oldSub > subs)
+			subs = oldSub - decreaseRate;
 		if (oldLow > lows)
 			lows = oldLow - decreaseRate;
 		if (oldMid > mids)
 			mids = oldMid - decreaseRate;
 		if (oldHigh > highs)
 			highs = oldHigh - decreaseRate;
+		
 		bandsComb = 0.66f * lows + 0.8f * mids + 1 * highs;
 	}
 	private void generateSomeLines() {
-		float heightMult = 4;
-		float dist = -((cols / fft.specSize()) + cols);
-		int zOffset = -300;
-		int n = - (int)(((fft.specSize() * specLow) + (fft.specSize() * specMid))/4);
-		if (song.isPlaying()) {
-			previousBandValue = fft.getBand(0);
-			for (int i = 0; i < (((fft.specSize() * specLow) + (fft.specSize() * specMid))/4)+(((fft.specSize() * specLow) + (fft.specSize() * specMid))); i++) {
-				stroke(map(lows, 0, 1200, 0, 255), map(mids, 0, 800, 0, 255), map(highs, 0, 800, 0, 255));
-				float bandValue = fft.getBand(i)*(1 + (i/50));
-				line(dist*(-n), -(cols / 2), (previousBandValue*heightMult) + zOffset, dist*(-n-1), -(cols / 2), (bandValue*heightMult) + zOffset);
+		float heightMult = 2.5f;
+		int specRange = (int)((fft.specSize() * specLow) + (fft.specSize() * specMid));
+		if (isThereSound) {
+			previousBandValue = fft.getBand(1);
+			for (int i = 1; i < width; i++) {
+				if (currentColorMode == RGB)
+					stroke(map(lows, 0, 1200, 0, 255), map(mids, 0, 800, 0, 255), map(highs, 0, 800, 0, 255));
+				else
+					stroke(displayColor2);
+				float bandValue = fft.getBand((int)(map(i, 0, width, 0, specRange)))*(1 + (map(i, 0, width, 0, specRange)/100));
+				line(i, height - (previousBandValue*heightMult), i+1, height - (bandValue*heightMult));
 				previousBandValue = bandValue;
-				n ++;
 			}
-		} else {
-			float xoff = lineAccel;
-			for (int i = 0; i < (((fft.specSize() * specLow) + (fft.specSize() * specMid))/4)+(((fft.specSize() * specLow) + (fft.specSize() * specMid))); i++) {
-				stroke(displayColor2, intensity * 5);
-				float bandValue = map(noise(xoff), 0, 1, -125, 125);
-				line(dist*(-n), -(cols / 2), (previousBandValue*heightMult) + zOffset, dist*(-n-1), -(cols / 2), (bandValue*heightMult) + zOffset);
-				previousBandValue = bandValue;
-				n ++;
-				xoff += 0.01;
-			}
-			lineAccel -= 0.01;
 		}
 	}
 	public String[] MetaString () {
